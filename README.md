@@ -1,14 +1,15 @@
 # YouTube Remaining Time (Speed)
 
-Chrome extension that replaces YouTube’s **right-side duration** with the total video length at your current playback speed:
+Chrome extension that scales **both** YouTube player times by playback speed:
 
 ```text
-displayed duration = video duration ÷ playback rate
+left  (current)  = currentTime ÷ playback rate
+right (duration) = duration ÷ playback rate
 ```
 
-The value stays fixed while the video plays. It only updates when you change speed or switch videos. The left-hand time is left alone.
+**Example at 2×:** media `12:39 / 26:00` shows as `6:19 / 13:00`.
 
-**Example:** a `1:06:24` video at **2×** shows `33:12` on the right.
+If you click the clock into remaining mode (`-M:SS`), the left value is wall-clock remaining at the current speed.
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Web_Store-Install-4285F4?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/search/YouTube%20Remaining%20Time%20(Speed))
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -35,13 +36,13 @@ Available on the [Chrome Web Store](https://chromewebstore.google.com/search/You
 
 ## How it works
 
-| Speed | Right-side clock |
-| --- | --- |
-| 1× | Normal total duration |
-| 1.5× | Duration ÷ 1.5 |
-| 2× | Duration ÷ 2 |
+| Speed | Left (current) | Right (duration) |
+| --- | --- | --- |
+| 1× | Normal elapsed | Normal total |
+| 1.5× | Elapsed ÷ 1.5 | Duration ÷ 1.5 |
+| 2× | Elapsed ÷ 2 | Duration ÷ 2 |
 
-A content script on `youtube.com` updates `.ytp-time-duration` in place. It does not change `.ytp-time-current`.
+A content script on `youtube.com` updates `.ytp-time-current` and `.ytp-time-duration` in place.
 
 ## Privacy
 
