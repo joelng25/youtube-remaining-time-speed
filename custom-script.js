@@ -1,7 +1,7 @@
 /**
  * Enhancer for YouTube™ — Custom script
  * Scales both player times by playback speed.
- * Restores native times when returning to 1×.
+ * Updates on new video / rate change; light timeupdate only when rate ≠ 1.
  *
  * Install: Enhancer options → Custom script → paste → Save
  * Enable: "Automatically execute the script when YouTube is loaded"
@@ -16,7 +16,6 @@
   let currentEl = null;
   let durationEl = null;
   let listeningVideo = null;
-  let lastRate = null;
 
   function formatTime(totalSeconds) {
     const s = Math.max(0, Math.floor(totalSeconds + 1e-9));
@@ -73,29 +72,6 @@
     if (el.textContent !== text) el.textContent = text;
   }
 
-  function isRemainingMode() {
-    return !!(currentEl && /^\s*-/.test(currentEl.textContent || ""));
-  }
-
-  function writeTimes(rate) {
-    if (!currentEl || !currentEl.isConnected || !durationEl || !durationEl.isConnected) {
-      refreshElements();
-    }
-    if (!durationEl) return;
-
-    setText(durationEl, formatTime(video.duration / rate));
-
-    if (!currentEl) return;
-    if (isRemainingMode()) {
-      setText(
-        currentEl,
-        "-" + formatTime((video.duration - video.currentTime) / rate)
-      );
-    } else {
-      setText(currentEl, formatTime(video.currentTime / rate));
-    }
-  }
-
   function update() {
     if (!video || !video.isConnected) {
       refreshElements();
@@ -106,16 +82,25 @@
 
     const rate = video.playbackRate || 1;
     if (!isFinite(rate) || rate <= 0) return;
+    if (rate === 1) return;
 
-    const prev = lastRate;
-    lastRate = rate;
-
-    if (rate === 1) {
-      if (prev !== 1) writeTimes(1);
-      return;
+    if (!currentEl || !currentEl.isConnected || !durationEl || !durationEl.isConnected) {
+      refreshElements();
     }
 
-    writeTimes(rate);
+    setText(durationEl, formatTime(video.duration / rate));
+
+    if (currentEl) {
+      const remainingMode = /^\s*-/.test(currentEl.textContent || "");
+      if (remainingMode) {
+        setText(
+          currentEl,
+          "-" + formatTime((video.duration - video.currentTime) / rate)
+        );
+      } else {
+        setText(currentEl, formatTime(video.currentTime / rate));
+      }
+    }
   }
 
   function onRateChange() {
@@ -123,7 +108,6 @@
   }
 
   function onVideoStart() {
-    lastRate = null;
     refreshElements();
     update();
   }
@@ -143,7 +127,6 @@
       listeningVideo.removeEventListener("timeupdate", onTimeUpdate);
     }
     listeningVideo = video;
-    lastRate = null;
     video.addEventListener("ratechange", onRateChange);
     video.addEventListener("loadedmetadata", onVideoStart);
     video.addEventListener("durationchange", onVideoStart);
@@ -153,7 +136,6 @@
   }
 
   function onNavigate() {
-    lastRate = null;
     refreshElements();
     update();
   }

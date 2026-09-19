@@ -5,7 +5,6 @@
  *
  * Updates on: new video / metadata, rate change.
  * While rate ≠ 1, also hooks timeupdate so YouTube cannot overwrite the left clock.
- * When rate returns to 1×, restores YouTube’s native (unscaled) times.
  */
 (function () {
   if (window.__ytSpeedRemainingInstalled) return;
@@ -17,7 +16,6 @@
   let currentEl = null;
   let durationEl = null;
   let listeningVideo = null;
-  let lastRate = null;
 
   function formatTime(totalSeconds) {
     const s = Math.max(0, Math.floor(totalSeconds + 1e-9));
@@ -74,29 +72,6 @@
     if (el.textContent !== text) el.textContent = text;
   }
 
-  function isRemainingMode() {
-    return !!(currentEl && /^\s*-/.test(currentEl.textContent || ""));
-  }
-
-  function writeTimes(rate) {
-    if (!currentEl || !currentEl.isConnected || !durationEl || !durationEl.isConnected) {
-      refreshElements();
-    }
-    if (!durationEl) return;
-
-    setText(durationEl, formatTime(video.duration / rate));
-
-    if (!currentEl) return;
-    if (isRemainingMode()) {
-      setText(
-        currentEl,
-        "-" + formatTime((video.duration - video.currentTime) / rate)
-      );
-    } else {
-      setText(currentEl, formatTime(video.currentTime / rate));
-    }
-  }
-
   function update() {
     if (!video || !video.isConnected) {
       refreshElements();
@@ -108,16 +83,26 @@
     const rate = video.playbackRate || 1;
     if (!isFinite(rate) || rate <= 0) return;
 
-    const prev = lastRate;
-    lastRate = rate;
+    // At 1× YouTube’s own clock is already correct
+    if (rate === 1) return;
 
-    // Restore native times when returning to 1× (or staying at 1× after a scaled state)
-    if (rate === 1) {
-      if (prev !== 1) writeTimes(1);
-      return;
+    if (!currentEl || !currentEl.isConnected || !durationEl || !durationEl.isConnected) {
+      refreshElements();
     }
 
-    writeTimes(rate);
+    setText(durationEl, formatTime(video.duration / rate));
+
+    if (currentEl) {
+      const remainingMode = /^\s*-/.test(currentEl.textContent || "");
+      if (remainingMode) {
+        setText(
+          currentEl,
+          "-" + formatTime((video.duration - video.currentTime) / rate)
+        );
+      } else {
+        setText(currentEl, formatTime(video.currentTime / rate));
+      }
+    }
   }
 
   function onRateChange() {
@@ -125,12 +110,12 @@
   }
 
   function onVideoStart() {
-    lastRate = null;
     refreshElements();
     update();
   }
 
   function onTimeUpdate() {
+    // Only needed so the left clock stays scaled while playing
     if (video && video.playbackRate !== 1) update();
   }
 
@@ -145,7 +130,6 @@
       listeningVideo.removeEventListener("timeupdate", onTimeUpdate);
     }
     listeningVideo = video;
-    lastRate = null;
     video.addEventListener("ratechange", onRateChange);
     video.addEventListener("loadedmetadata", onVideoStart);
     video.addEventListener("durationchange", onVideoStart);
@@ -155,7 +139,6 @@
   }
 
   function onNavigate() {
-    lastRate = null;
     refreshElements();
     update();
   }
