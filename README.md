@@ -42,7 +42,9 @@ Available on the [Chrome Web Store](https://chromewebstore.google.com/search/You
 | 1.5× | Elapsed ÷ 1.5 | Duration ÷ 1.5 |
 | 2× | Elapsed ÷ 2 | Duration ÷ 2 |
 
-A content script on `youtube.com` updates `.ytp-time-current` and `.ytp-time-duration` in place.
+The name includes remaining time because clicking YouTube's clock enables that mode. By default both elapsed and total duration are scaled. The extension hides native clock text and adds separate sibling labels rather than rewriting YouTube nodes. At normal speed, during ads and on live streams it restores the native clock. SPA navigation rebinds the new player and removes labels from the previous player.
+
+`content.js` runs automatically as the MV3 extension content script. `custom-script.js` is the same executable logic distributed for Enhancer's custom-script feature; it runs only after you paste it and enable auto-execute there. Both perform local DOM updates and make no network requests. Do not enable both at once.
 
 ## Privacy
 

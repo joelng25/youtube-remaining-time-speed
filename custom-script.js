@@ -14,6 +14,7 @@
   const CLS_CUR = "yt-speed-current";
   const CLS_DUR = "yt-speed-duration";
 
+  let previousPlayer = null;
   let video = null;
   let currentEl = null;
   let durationEl = null;
@@ -123,7 +124,7 @@
       refresh();
       if (!video) return;
     }
-    if (isLive()) {
+    if (isLive() || getPlayer()?.classList.contains("ad-showing")) {
       setScaledActive(false);
       stopLoop();
       return;
@@ -231,7 +232,14 @@
 
   function refresh() {
     ensureStyle();
-    video = document.querySelector(VIDEO_SEL);
+    const player = getPlayer();
+    if (previousPlayer && previousPlayer !== player) {
+      previousPlayer.classList.remove(CLS_PLAYER);
+      previousPlayer.querySelectorAll('.' + CLS_CUR + ',.' + CLS_DUR).forEach(el => el.remove());
+      lastLeft = lastRight = "";
+    }
+    previousPlayer = player;
+    video = player ? player.querySelector(VIDEO_SEL) : null;
     ensureOverlays();
     bindVideo();
     bindTimeDisplayClick();
@@ -254,17 +262,21 @@
     }
   );
 
-  const mo = new MutationObserver(function () {
-    if (video && (video.playbackRate || 1) !== 1) {
-      if (!document.querySelector("." + CLS_CUR) || !document.querySelector("." + CLS_DUR)) {
-        ourCurrent = null;
-        ourDuration = null;
-        ensureOverlays();
-        update();
-      }
-    }
+  const mo = new MutationObserver(function (records) {
+    if (records.every(record => record.target.closest?.('.' + CLS_CUR + ',.' + CLS_DUR))) return;
+    refresh();
+    lastLeft = lastRight = "";
+    update();
+    if (video && !isLive() && !getPlayer()?.classList.contains('ad-showing') && video.playbackRate !== 1) startLoop();
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
+  const adObserver = new MutationObserver(function (records) {
+    if (!records.some(record => record.target === getPlayer() &&
+        (record.oldValue || "").split(/\s+/).includes("ad-showing") !== getPlayer()?.classList.contains("ad-showing"))) return;
+    update();
+    if (video && !isLive() && !getPlayer()?.classList.contains('ad-showing') && video.playbackRate !== 1) startLoop();
+  });
+  adObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'], attributeOldValue: true, subtree: true });
 
   refresh();
   if (video && (video.playbackRate || 1) !== 1) startLoop();
