@@ -1,2 +1,0 @@
-- Keep content.js and custom-script.js executable bodies equivalent, tested against the same player scenarios.
-- Restore native time display for advertisements, live streams and normal speed; rebind on SPA navigation.
