@@ -1,5 +1,6 @@
 /**
- * Enhancer for YouTube™ — Custom script (same logic as content.js).
+ * Enhancer for YouTube™ — Custom script.
+ * GENERATED from content.js by `npm run build:userscript` — do not edit.
  * Paste into Custom script and enable auto-execute.
  *
  * Scales times without flicker: hides native clock, shows our labels.

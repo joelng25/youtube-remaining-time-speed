@@ -179,3 +179,9 @@ for (const script of ['content.js', 'custom-script.js']) {
     assert.equal(t.observing(docEl).length, 0, 'bootstrap observer disconnected');
   });
 }
+
+test('custom-script.js is generated from content.js', () => {
+  const { render } = require('../scripts/build-userscript.cjs');
+  assert.equal(fs.readFileSync(path.join(ROOT, 'custom-script.js'), 'utf8'), render(),
+    'run `npm run build:userscript` after editing content.js');
+});
