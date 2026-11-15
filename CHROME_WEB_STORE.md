@@ -1,18 +1,26 @@
 # Chrome Web Store — publishing guide
 
+Listing: https://chromewebstore.google.com/detail/youtube-remaining-time-sp/aeiiffihjecajlabfllkkoenldfnamha
+
 ## File to upload
 
-Use the **ZIP** (not a CRX) for the Chrome Web Store:
+Build the ZIP (not a CRX) from the repo root:
 
-`dist/youtube-remaining-time-speed-1.0.0.zip`
+```bash
+bun run package   # or: npm run package
+```
 
-CRX is optional (local packing only). The store **requires a ZIP**.
+This writes:
 
-## Prerequisites
+`dist/youtube-remaining-time-speed-1.3.0.zip`
 
-1. Chrome Web Store Developer account: https://chrome.google.com/webstore/devconsole  
-2. One-time developer registration fee (~USD 5).  
-3. Click **New item** → upload the ZIP.
+It contains only `manifest.json`, `content.js` and the icons. The version in the file name comes from `manifest.json`; bump it before every upload (the store rejects a version it has already seen).
+
+## Updating the existing item
+
+1. Developer dashboard: https://chrome.google.com/webstore/devconsole
+2. Open **YouTube Remaining Time (Speed)** → **Package** → **Upload new package** → pick the ZIP.
+3. Update the **Store listing** text below if behavior changed, then **Submit for review**.
 
 ## Store listing copy (paste)
 
@@ -20,68 +28,59 @@ CRX is optional (local packing only). The store **requires a ZIP**.
 YouTube Remaining Time (Speed)
 
 ### Summary (max 132)
-Shows YouTube’s total video duration adjusted for playback speed (duration ÷ speed).
+Scales YouTube’s clock by playback speed: elapsed, remaining and total time show real time at 1.5×, 2× and more.
 
 ### Detailed description
-YouTube Remaining Time (Speed) replaces the right-hand number on the player clock (total duration) so it reflects how long the video takes at the current playback speed.
 
-How it works:
-• At 1× you see the normal duration.
-• At 2× you see half (e.g. 1:00:00 → 30:00).
-• The value does not count down while playing — it only changes when you change speed or switch videos.
-• It does not modify the left-hand time.
+YouTube Remaining Time (Speed) adjusts the player clock to the speed you are watching at, so the numbers tell you how much of your time a video really takes.
 
-Privacy:
-This extension does not collect data, does not use accounts, and does not send information to any server. It only updates the clock text on youtube.com.
+What it does
+• Divides both times on the player clock by the playback speed: at 2×, 12:39 / 26:00 shows as 6:19 / 13:00.
+• Remaining mode: click YouTube’s clock to switch to remaining time (-M:SS); the remaining time is also scaled, so it is the real time left at your current speed.
+• Updates live while you play, seek or change speed.
+• Shows YouTube’s normal clock at 1×, during ads and on live streams.
+• Works when you move between videos without reloading, and in the miniplayer.
+• Screen-reader friendly: the adjusted times are announced, with a note saying they are adjusted for the current speed.
+
+Privacy
+No data collection, no accounts, no analytics and no network requests. It only changes the clock text on YouTube pages, locally in your browser.
 
 ### Category
 Productivity (or Accessibility)
 
 ### Language
-English
+English (Spanish can be added as a second listing language)
 
 ## Single purpose declaration
-Adjust YouTube’s displayed total duration according to the current playback speed.
+Show YouTube’s player times (elapsed, remaining and total duration) adjusted for the current playback speed.
 
 ## Permission justification
-Host access to youtube.com: required to update the player’s duration text on YouTube watch pages via a content script. No other sites. No remote code. No data collection.
+Content script on youtube.com: required to read the video’s time and speed and show adjusted labels in the player clock. No other sites, no extra permissions, no remote code, no data collection.
 
 ## Privacy practices (form)
 
-In the Chrome Web Store dashboard:
-
-1. **Privacy practices → Data usage**  
-   Select that the extension **does not collect user data** (None).
-
-2. **Privacy policy URL** (required field in many listings)  
-   Host `privacy-policy.html` publicly, then paste that URL.
-
-   Quick free options:
-   - Upload `privacy-policy.html` to GitHub and use the raw/GitHub Pages URL  
-   - Or paste the HTML into a public Google Doc / Notion page and use the public link  
-
-   Local file paths (`C:\...`) are **not** accepted.
-
-3. Single purpose / permission justifications: see sections above.
+1. **Privacy practices → Data usage**: the extension **does not collect user data** (None).
+2. **Privacy policy URL**: a public URL for `privacy-policy.html` (for example via GitHub Pages). Local file paths are not accepted.
+3. Single purpose / permission justification: see above.
 
 Files in this repo:
-- `privacy-policy.html` — host this and use its public URL in the store  
-- `privacy-policy.md` — same text in Markdown  
+- `privacy-policy.html` — host this and use its public URL in the store
+- `privacy-policy.md` — same text in Markdown
 
-## Screenshots (required)
-Ready-made files (upload at least one):
+## Screenshots
+Ready-made files (upload at least one; up to five are allowed):
 
-- `store/screenshot-1280x800.png` — preferred size for Chrome Web Store
+- `store/screenshot-1280x800.png` — preferred size
 - `store/screenshot-640x400.png` — alternate size
 
-Shows a YouTube-like player with speed **2x** and right-side duration adjusted (e.g. `12:34 / 30:00`).
+Recommended additions: 1× vs 2× side by side, remaining mode (`-M:SS`), and a small promo tile (440×280) such as “1:00:00 → 30:00 at 2×”.
 
-Store icon: use `icons/icon128.png` (128×128).
+Store icon: `icons/icon128.png` (128×128).
 
 ## After publishing
-- Google review usually takes hours to a few days.
-- To update: upload a new ZIP with a higher `version` in `manifest.json` (e.g. 1.0.1).
+- Review usually takes hours to a few days.
+- Next update: bump `version` in `manifest.json` (and `package.json`), run `bun run package`, upload the new ZIP.
 
 ## Local install (no store)
 1. `chrome://extensions` → Developer mode → Load unpacked → this project folder.
-2. Do not drag the ZIP as unpacked; use the folder. Modern Chrome limits CRX installs outside the store.
+2. Load the folder, not the ZIP.
