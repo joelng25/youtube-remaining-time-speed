@@ -5,6 +5,11 @@
  *
  *   left  = currentTime / rate  (or -remaining/rate)
  *   right = duration / rate
+ *
+ * Updates are event-driven (video timeupdate/ratechange/seeked/...), so no
+ * work happens while the video is paused. Mutation observers are scoped to
+ * the player element (class attribute), the time display and the player's
+ * parent; a document-wide observer only runs until a player exists.
  */
 (function () {
   if (window.__ytSpeedRemainingInstalled) return;
@@ -15,6 +20,19 @@
   const CLS_PLAYER = "yt-speed-scaled";
   const CLS_CUR = "yt-speed-current";
   const CLS_DUR = "yt-speed-duration";
+  const CLS_SR = "yt-speed-sr";
+  const OUR_SEL = "." + CLS_CUR + ",." + CLS_DUR + ",." + CLS_SR;
+  const PLAYER_STATE_CLASSES = ["ad-showing", "ytp-player-minimized", "ytp-live"];
+  const VIDEO_EVENTS = {
+    timeupdate: onTick,
+    seeked: onTick,
+    pause: onTick,
+    play: onVideoReady,
+    ratechange: onVideoReady,
+    loadedmetadata: onVideoReady,
+    durationchange: onVideoReady,
+    emptied: onVideoReady
+  };
 
   let previousPlayer = null;
   let video = null;
@@ -22,12 +40,16 @@
   let durationEl = null;
   let ourCurrent = null;
   let ourDuration = null;
+  let ourNote = null;
   let listeningVideo = null;
+  let observedPlayer = null;
+  let observedDisplay = null;
   let remainingMode = false;
-  let raf = 0;
   let lastLeft = "";
   let lastRight = "";
+  let lastNote = "";
   let cachedFontSize = "13px";
+  let hiddenNatives = [];
 
   function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -40,7 +62,10 @@
       "." + CLS_PLAYER + " ." + CLS_CUR + "," +
       "." + CLS_PLAYER + " ." + CLS_DUR + "{" +
       "font-weight:inherit;color:inherit;" +
-      "font-family:inherit;letter-spacing:inherit;white-space:nowrap}";
+      "font-family:inherit;letter-spacing:inherit;white-space:nowrap}" +
+      "." + CLS_SR + "{position:absolute!important;width:1px;height:1px;" +
+      "margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);" +
+      "clip-path:inset(50%);white-space:nowrap}";
     (document.head || document.documentElement).appendChild(style);
   }
 
@@ -55,6 +80,10 @@
     return m + ":" + String(sec).padStart(2, "0");
   }
 
+  function formatRate(rate) {
+    return String(Math.round(rate * 100) / 100) + "×";
+  }
+
   function getPlayer() {
     return document.querySelector(".html5-video-player");
   }
@@ -65,11 +94,23 @@
     return getPlayer() || document.querySelector(".ytp-chrome-bottom") || document;
   }
 
+  function isAdShowing() {
+    const player = getPlayer();
+    return !!(player && player.classList.contains("ad-showing"));
+  }
+
   function isLive() {
     if (!video) return true;
     const display = getPlayerRoot().querySelector(".ytp-time-display");
     if (display && display.classList.contains("ytp-live")) return true;
     return !isFinite(video.duration) || video.duration === Infinity;
+  }
+
+  function makeLabel(cls, after) {
+    const el = document.createElement("span");
+    el.className = cls;
+    after.insertAdjacentElement("afterend", el);
+    return el;
   }
 
   function ensureOverlays() {
@@ -80,18 +121,20 @@
 
     ourCurrent = root.querySelector("." + CLS_CUR);
     if (!ourCurrent) {
-      ourCurrent = document.createElement("span");
-      ourCurrent.className = CLS_CUR;
-      ourCurrent.setAttribute("aria-hidden", "true");
-      currentEl.insertAdjacentElement("afterend", ourCurrent);
+      ourCurrent = makeLabel(CLS_CUR, currentEl);
+      lastLeft = "";
     }
 
     ourDuration = root.querySelector("." + CLS_DUR);
     if (!ourDuration) {
-      ourDuration = document.createElement("span");
-      ourDuration.className = CLS_DUR;
-      ourDuration.setAttribute("aria-hidden", "true");
-      durationEl.insertAdjacentElement("afterend", ourDuration);
+      ourDuration = makeLabel(CLS_DUR, durationEl);
+      lastRight = "";
+    }
+
+    ourNote = root.querySelector("." + CLS_SR);
+    if (!ourNote) {
+      ourNote = makeLabel(CLS_SR, ourDuration);
+      lastNote = "";
     }
 
     const probe =
@@ -106,12 +149,33 @@
     return true;
   }
 
+  function restoreNatives() {
+    hiddenNatives.forEach(function (el) {
+      el.removeAttribute("aria-hidden");
+    });
+    hiddenNatives = [];
+  }
+
+  function hideNatives() {
+    const els = [currentEl, durationEl].filter(Boolean);
+    if (els.length === hiddenNatives.length && els.every(function (el, i) {
+      return el === hiddenNatives[i];
+    })) return;
+    restoreNatives();
+    els.forEach(function (el) {
+      el.setAttribute("aria-hidden", "true");
+    });
+    hiddenNatives = els;
+  }
+
   function setScaledActive(on) {
     const player = getPlayer();
-    if (!player) return;
-    player.classList.toggle(CLS_PLAYER, on);
-    if (ourCurrent) ourCurrent.style.display = on ? "" : "none";
-    if (ourDuration) ourDuration.style.display = on ? "" : "none";
+    if (player) player.classList.toggle(CLS_PLAYER, on);
+    [ourCurrent, ourDuration, ourNote].forEach(function (el) {
+      if (el) el.style.display = on ? "" : "none";
+    });
+    if (on) hideNatives();
+    else restoreNatives();
   }
 
   function syncRemainingMode() {
@@ -126,9 +190,8 @@
       refresh();
       if (!video) return;
     }
-    if (isLive() || getPlayer()?.classList.contains("ad-showing")) {
+    if (isLive() || isAdShowing()) {
       setScaledActive(false);
-      stopLoop();
       return;
     }
     if (!isFinite(video.duration) || !isFinite(video.currentTime)) return;
@@ -138,7 +201,6 @@
 
     if (rate === 1) {
       setScaledActive(false);
-      stopLoop();
       return;
     }
 
@@ -150,6 +212,9 @@
     const left = remainingMode
       ? "-" + formatTime((video.duration - video.currentTime) / rate)
       : formatTime(video.currentTime / rate);
+    const note =
+      (remainingMode ? "Remaining" : "Elapsed") +
+      " time and duration adjusted for " + formatRate(rate) + " playback speed";
 
     if (left !== lastLeft) {
       ourCurrent.textContent = left;
@@ -159,62 +224,37 @@
       ourDuration.textContent = right;
       lastRight = right;
     }
-  }
-
-  function loop() {
-    update();
-    if (video && (video.playbackRate || 1) !== 1) {
-      raf = requestAnimationFrame(loop);
-    } else {
-      raf = 0;
+    if (note !== lastNote) {
+      ourNote.textContent = note;
+      lastNote = note;
     }
   }
 
-  function startLoop() {
-    if (raf) return;
-    raf = requestAnimationFrame(loop);
-  }
-
-  function stopLoop() {
-    if (!raf) return;
-    cancelAnimationFrame(raf);
-    raf = 0;
-  }
-
-  function onRateChange() {
-    lastLeft = "";
-    lastRight = "";
-    if (video && (video.playbackRate || 1) !== 1) startLoop();
-    else {
-      setScaledActive(false);
-      stopLoop();
-    }
+  function onTick() {
+    // Cheap path for frequent events: only redraw when speed is not 1×.
+    if (!video || (video.playbackRate || 1) === 1) return;
     update();
   }
 
   function onVideoReady() {
-    refresh();
     lastLeft = "";
     lastRight = "";
-    if (video && (video.playbackRate || 1) !== 1) startLoop();
+    lastNote = "";
     update();
   }
 
   function bindVideo() {
-    if (!video || video === listeningVideo) return;
+    if (video === listeningVideo) return;
     if (listeningVideo) {
-      listeningVideo.removeEventListener("ratechange", onRateChange);
-      listeningVideo.removeEventListener("loadedmetadata", onVideoReady);
-      listeningVideo.removeEventListener("durationchange", onVideoReady);
-      listeningVideo.removeEventListener("play", onVideoReady);
-      listeningVideo.removeEventListener("seeked", update);
+      Object.keys(VIDEO_EVENTS).forEach(function (evt) {
+        listeningVideo.removeEventListener(evt, VIDEO_EVENTS[evt]);
+      });
     }
     listeningVideo = video;
-    video.addEventListener("ratechange", onRateChange);
-    video.addEventListener("loadedmetadata", onVideoReady);
-    video.addEventListener("durationchange", onVideoReady);
-    video.addEventListener("play", onVideoReady);
-    video.addEventListener("seeked", update);
+    if (!video) return;
+    Object.keys(VIDEO_EVENTS).forEach(function (evt) {
+      video.addEventListener(evt, VIDEO_EVENTS[evt]);
+    });
   }
 
   function onTimeDisplayClick() {
@@ -232,30 +272,139 @@
     contents.addEventListener("click", onTimeDisplayClick);
   }
 
+  function classSet(value) {
+    return (value || "").split(/\s+/);
+  }
+
+  function stateClassChanged(record) {
+    const before = classSet(record.oldValue);
+    const target = record.target;
+    return PLAYER_STATE_CLASSES.some(function (cls) {
+      return before.includes(cls) !== !!(target.classList && target.classList.contains(cls));
+    });
+  }
+
+  function isOurNode(node) {
+    return !!(node && node.nodeType === 1 && node.matches && node.matches(OUR_SEL));
+  }
+
+  function isOwnRecord(record) {
+    const target = record.target;
+    const el = target && target.nodeType === 1 ? target : target && target.parentNode;
+    if (el && el.closest && el.closest(OUR_SEL)) return true;
+    if (record.type !== "childList") return false;
+    const nodes = Array.from(record.addedNodes || []).concat(Array.from(record.removedNodes || []));
+    return nodes.length > 0 && nodes.every(isOurNode);
+  }
+
+  function overlaysAttached() {
+    return !!(ourCurrent && ourCurrent.isConnected && ourDuration && ourDuration.isConnected);
+  }
+
+  // Player element: only its class attribute (ads, miniplayer, live).
+  const playerObserver = new MutationObserver(function (records) {
+    if (!records.some(stateClassChanged)) return;
+    refresh();
+    onVideoReady();
+  });
+
+  // Player's parent: detects the player node being replaced or removed.
+  const containerObserver = new MutationObserver(function () {
+    if (observedPlayer && observedPlayer.isConnected && getPlayer() === observedPlayer) return;
+    refresh();
+    onVideoReady();
+  });
+
+  // Time display: YouTube re-rendering its clock (our labels dropped), the
+  // live badge toggling, or the native clock switching to remaining mode.
+  const displayObserver = new MutationObserver(function (records) {
+    const relevant = records.filter(function (r) { return !isOwnRecord(r); });
+    if (!relevant.length) return;
+    const classChange = relevant.some(function (r) {
+      return r.type === "attributes" && stateClassChanged(r);
+    });
+    const wasRemaining = remainingMode;
+    syncRemainingMode();
+    if (!classChange && overlaysAttached() && wasRemaining === remainingMode) return;
+    if (!video || (video.playbackRate || 1) === 1) {
+      if (classChange) update();
+      return;
+    }
+    if (!overlaysAttached()) refresh();
+    onVideoReady();
+  });
+
+  // Bootstrap only: waits for the first player, then disconnects.
+  let bootstrapActive = false;
+  const bootstrapObserver = new MutationObserver(function () {
+    if (!getPlayer()) return;
+    refresh();
+    onVideoReady();
+  });
+
+  function setBootstrap(on) {
+    if (on === bootstrapActive) return;
+    bootstrapActive = on;
+    if (on) bootstrapObserver.observe(document.documentElement, { childList: true, subtree: true });
+    else bootstrapObserver.disconnect();
+  }
+
+  function bindObservers(player) {
+    if (player !== observedPlayer) {
+      playerObserver.disconnect();
+      containerObserver.disconnect();
+      observedPlayer = player;
+      if (player) {
+        playerObserver.observe(player, {
+          attributes: true,
+          attributeFilter: ["class"],
+          attributeOldValue: true
+        });
+        if (player.parentNode) containerObserver.observe(player.parentNode, { childList: true });
+      }
+    }
+    const display = player ? getPlayerRoot().querySelector(".ytp-time-display") : null;
+    if (display !== observedDisplay) {
+      displayObserver.disconnect();
+      observedDisplay = display;
+      if (display) {
+        displayObserver.observe(display, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+          attributes: true,
+          attributeFilter: ["class"],
+          attributeOldValue: true
+        });
+      }
+    }
+    setBootstrap(!player || !display);
+  }
+
   function refresh() {
     ensureStyle();
     const player = getPlayer();
     if (previousPlayer && previousPlayer !== player) {
+      restoreNatives();
       previousPlayer.classList.remove(CLS_PLAYER);
-      previousPlayer.querySelectorAll('.' + CLS_CUR + ',.' + CLS_DUR).forEach(el => el.remove());
-      lastLeft = lastRight = "";
+      previousPlayer.querySelectorAll(OUR_SEL).forEach(function (el) { el.remove(); });
+      lastLeft = lastRight = lastNote = "";
     }
     previousPlayer = player;
     video = player ? player.querySelector(VIDEO_SEL) : null;
     ensureOverlays();
     bindVideo();
     bindTimeDisplayClick();
+    bindObservers(player);
   }
 
   function onNavigate() {
     remainingMode = false;
-    lastLeft = "";
-    lastRight = "";
     ourCurrent = null;
     ourDuration = null;
+    ourNote = null;
     refresh();
-    if (video && (video.playbackRate || 1) !== 1) startLoop();
-    update();
+    onVideoReady();
   }
 
   ["yt-navigate-finish", "yt-page-data-updated", "yt-player-updated"].forEach(
@@ -264,23 +413,6 @@
     }
   );
 
-  const mo = new MutationObserver(function (records) {
-    if (records.every(record => record.target.closest?.('.' + CLS_CUR + ',.' + CLS_DUR))) return;
-    refresh();
-    lastLeft = lastRight = "";
-    update();
-    if (video && !isLive() && !getPlayer()?.classList.contains('ad-showing') && video.playbackRate !== 1) startLoop();
-  });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-  const adObserver = new MutationObserver(function (records) {
-    if (!records.some(record => record.target === getPlayer() &&
-        (record.oldValue || "").split(/\s+/).includes("ad-showing") !== getPlayer()?.classList.contains("ad-showing"))) return;
-    update();
-    if (video && !isLive() && !getPlayer()?.classList.contains('ad-showing') && video.playbackRate !== 1) startLoop();
-  });
-  adObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'], attributeOldValue: true, subtree: true });
-
   refresh();
-  if (video && (video.playbackRate || 1) !== 1) startLoop();
-  update();
+  onVideoReady();
 })();
