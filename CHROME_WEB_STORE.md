@@ -68,12 +68,17 @@ Files in this repo:
 - `privacy-policy.md` — same text in Markdown
 
 ## Screenshots
-Ready-made files (upload at least one; up to five are allowed):
 
-- `store/screenshot-1280x800.png` — preferred size
-- `store/screenshot-640x400.png` — alternate size
+English listing images (1280×800, up to five) and the small promo tile (440×280) are in `docs/screenshots/`:
 
-Recommended additions: 1× vs 2× side by side, remaining mode (`-M:SS`), and a small promo tile (440×280) such as “1:00:00 → 30:00 at 2×”.
+- `docs/screenshots/01-real-time-at-any-speed.png` — 1× vs 2×
+- `docs/screenshots/02-remaining-mode.png` — remaining mode (`-M:SS`)
+- `docs/screenshots/03-any-speed.png` — 1.25×, 1.75× and 3×
+- `docs/screenshots/04-stays-out-of-the-way.png` — native clock at 1×, ads and live
+- `docs/screenshots/05-lightweight-private.png` — no extra permissions, no data collected
+- `docs/screenshots/promo-440x280.png` — small promotional tile (`1:00:00 → 30:00` at 2×)
+
+Older single-frame captures remain in `store/` (`screenshot-1280x800.png`, `screenshot-640x400.png`).
 
 Store icon: `icons/icon128.png` (128×128).
 
