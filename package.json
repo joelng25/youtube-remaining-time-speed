@@ -2,7 +2,10 @@
   "name": "youtube-speed-time-tests",
   "private": true,
   "scripts": {
-    "test": "node --test tests/*.cjs"
+    "test": "node --test tests/*.cjs",
+    "build:userscript": "node scripts/build-userscript.cjs",
+    "check:userscript": "node scripts/build-userscript.cjs --check",
+    "package": "node scripts/build-userscript.cjs && node scripts/package.cjs"
   },
   "devDependencies": {
     "happy-dom": "^20.8.8"
